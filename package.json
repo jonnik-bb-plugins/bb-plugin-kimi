@@ -1,0 +1,55 @@
+{
+  "name": "bb-plugin-kimi",
+  "version": "0.1.0",
+  "description": "Adds Moonshot AI's Kimi Code CLI to bb as an ACP coding-agent provider.",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "bb",
+    "bb-plugin",
+    "acp",
+    "coding-agent",
+    "kimi",
+    "moonshot"
+  ],
+  "homepage": "https://github.com/OWNER/bb-plugin-kimi#readme",
+  "bugs": {
+    "url": "https://github.com/OWNER/bb-plugin-kimi/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/bb-plugin-kimi.git"
+  },
+  "engines": {
+    "bb": ">=0.40",
+    "bbPluginSdk": ">=0.4.8"
+  },
+  "bb": {
+    "name": "Kimi",
+    "description": "Adds Moonshot AI's Kimi Code CLI to bb as an ACP coding-agent provider.",
+    "branding": {
+      "icon": "./assets/logo.svg"
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx",
+    "skills": []
+  },
+  "scripts": {
+    "build": "bb plugin build .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "^0.6.133",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^26.0.0",
+    "@types/react": "^19.0.0",
+    "better-sqlite3": "^13.0.0",
+    "hono": "^4.11.9",
+    "typescript": "^7.0.0",
+    "vitest": "5.1.0"
+  }
+}
