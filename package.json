@@ -12,13 +12,13 @@
     "kimi",
     "moonshot"
   ],
-  "homepage": "https://github.com/JonniK/bb-plugin-kimi#readme",
+  "homepage": "https://github.com/jonnik-bb-plugins/bb-plugin-kimi#readme",
   "bugs": {
-    "url": "https://github.com/JonniK/bb-plugin-kimi/issues"
+    "url": "https://github.com/jonnik-bb-plugins/bb-plugin-kimi/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JonniK/bb-plugin-kimi.git"
+    "url": "git+https://github.com/jonnik-bb-plugins/bb-plugin-kimi.git"
   },
   "engines": {
     "bb": ">=0.40",

@@ -20,7 +20,7 @@
   "category": "agents-and-providers",
   "source": {
     "git": {
-      "url": "https://github.com/JonniK/bb-plugin-kimi.git",
+      "url": "https://github.com/jonnik-bb-plugins/bb-plugin-kimi.git",
       "range": "^0.2.0"
     }
   }

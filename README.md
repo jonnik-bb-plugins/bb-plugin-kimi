@@ -25,7 +25,7 @@ login (subscription or API key), billed by Moonshot, not bb.
 Until the marketplace entry is merged, install directly from GitHub:
 
 ```bash
-bb plugin install git:https://github.com/JonniK/bb-plugin-kimi.git@main
+bb plugin install git:https://github.com/jonnik-bb-plugins/bb-plugin-kimi.git@main
 ```
 
 For local development:

@@ -1,6 +1,6 @@
 # bb-plugin-kimi
 
-GitHub: https://github.com/JonniK/bb-plugin-kimi
+GitHub: https://github.com/jonnik-bb-plugins/bb-plugin-kimi
 npm package: `bb-plugin-kimi` (marketplace installs from git, not npm)
 bb plugin id: `kimi` (from package name `bb-plugin-kimi`)
 provider id: `acp-kimi`
@@ -79,7 +79,7 @@ Do not run `bb kimi unregister` as part of a release.
 
 ## Publishing checklist (first submission)
 
-1. Repo `JonniK/bb-plugin-kimi`, tagged with the `bb-plugin` topic.
+1. Repo `jonnik-bb-plugins/bb-plugin-kimi`, tagged with the `bb-plugin` topic.
 2. `v0.1.0` tag pushed, GitHub release created with `--verify-tag`.
 3. PR to `get-bb/marketplace` from `JonniK` adding `entries/kimi.json` —
    a ready draft is `docs/marketplace-entry.json`; copy `assets/logo.svg`
