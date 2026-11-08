@@ -27,6 +27,8 @@ import {
   type CustomAgent,
   type JsonObject,
 } from "./src/agent-entry.js";
+import { measureKimiUsage } from "./src/kimi-usage.js";
+import { registerKimiUsageSource } from "./src/usage-source.js";
 
 const SETTINGS_READY_ATTEMPTS = 10;
 const SETTINGS_READY_DELAY_MS = 500;
@@ -242,11 +244,20 @@ export default function plugin(bb: BbPluginApi) {
     },
   });
 
+  // Usage panel integration. Failure to register must not take the provider
+  // plugin down — the panel simply will not list Kimi.
+  try {
+    registerKimiUsageSource(bb);
+  } catch (error) {
+    bb.log.warn(`Could not register the Kimi usage source: ${String(error)}`);
+  }
+
   bb.cli.register({
     name: PROFILE.id,
     summary: `Manage the ${PROFILE.displayName} ACP provider.`,
     commands: [
       { name: "status", summary: "Check the CLI and bb provider registration", usage: `${PROFILE.id} status` },
+      { name: "usage", summary: "Print Kimi For Coding quota usage", usage: `${PROFILE.id} usage` },
       { name: "repair", summary: "Re-resolve the CLI and rewrite the managed ACP configuration", usage: `${PROFILE.id} repair` },
       { name: "unregister", summary: "Remove this plugin's managed ACP configuration", usage: `${PROFILE.id} unregister` },
     ],
@@ -272,6 +283,28 @@ export default function plugin(bb: BbPluginApi) {
         } catch (error) {
           return { exitCode: 1, stderr: `${String(error)}\n` };
         }
+      }
+      if (command === "usage") {
+        const result = await measureKimiUsage();
+        if (result.status !== "ok") {
+          const message = result.status === "unauthenticated"
+            ? "Not signed in: run `kimi login` first."
+            : result.status === "expired"
+              ? "Kimi OAuth session expired: run `kimi login` again."
+              : result.message;
+          return { exitCode: 1, stderr: `${message}\n` };
+        }
+        const lines = [
+          `Account: ${result.accountEmail ?? "unknown"}${result.planLabel ? ` (plan ${result.planLabel})` : ""}`,
+          ...result.windows.map((window) => {
+            const reset = window.resetsAt ? `, resets ${window.resetsAt}` : "";
+            const cost = window.cost
+              ? `, cost $${(window.cost.usedUsdCents / 100).toFixed(2)} of $${(window.cost.limitUsdCents / 100).toFixed(2)}`
+              : "";
+            return `${window.label}: ${window.usedPercent}% used${reset}${cost}`;
+          }),
+        ];
+        return { exitCode: 0, stdout: `${lines.join("\n")}\n` };
       }
       if (command === "status") {
         const root = await dataDir();

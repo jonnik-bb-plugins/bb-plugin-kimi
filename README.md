@@ -82,6 +82,24 @@ over ACP as the `mode` session option (`auto` = auto-approve safe operations,
 e.g. `bb thread spawn --option mode=auto`. Durable per-tool rules live in
 `[[permission.rules]]` in `~/.kimi-code/config.toml`.
 
+## Usage panel
+
+The plugin registers as a bb **provider-usage** source, so Kimi appears in
+bb's Provider usage panel with the quota windows of your Kimi For Coding
+subscription (5-hour, weekly, monthly) plus plan and account email.
+
+Measurements are local: the plugin reads the CLI's OAuth credentials in
+`~/.kimi-code/credentials/`, refreshes the access token when it nears expiry
+(tokens live ~15 minutes, the CLI does the same) and calls the coding API's
+`/usages` and `/me` endpoints. The base URL follows `KIMI_CODE_BASE_URL` or
+`[providers."managed:kimi-code"]` in `~/.kimi-code/config.toml`, defaulting
+to `api.kimi.com` with a fallback to `api.kimi.ai`. Tokens are never logged.
+The CLI equivalent:
+
+```bash
+bb kimi usage
+```
+
 ## Check or repair
 
 ```bash

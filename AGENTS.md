@@ -4,9 +4,9 @@ GitHub: https://github.com/JonniK/bb-plugin-kimi
 npm package: `bb-plugin-kimi` (marketplace installs from git, not npm)
 bb plugin id: `kimi` (from package name `bb-plugin-kimi`)
 provider id: `acp-kimi`
-CLI: `bb kimi status`, `bb kimi repair`, `bb kimi unregister`
+CLI: `bb kimi status`, `bb kimi usage`, `bb kimi repair`, `bb kimi unregister`
 Marketplace entry: `get-bb/marketplace` `entries/kimi.json`
-Current range: `^0.1.0` → node-semver `>=0.1.0 <0.2.0-0`
+Current range: `^0.2.0` → node-semver `>=0.2.0 <0.3.0-0`
 `author.github`: `JonniK` (gates later entry changes)
 
 # Release
