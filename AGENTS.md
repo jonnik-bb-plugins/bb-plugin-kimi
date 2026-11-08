@@ -9,6 +9,12 @@ Current range: `^0.1.0` → node-semver `>=0.1.0 <0.2.0-0`
 
 # Release
 
+## Building dist/
+
+If `bb plugin build .` stalls in a working tree with `node_modules`, build
+from a clean copy instead (`git archive HEAD | tar -x -C /tmp/kimi-build` and
+run `bb plugin build .` there), then copy `dist/` back and commit it.
+
 ## Do not move a tag
 
 bb resolves a marketplace `range` with node-semver `maxSatisfying` over this

@@ -29,12 +29,19 @@ describe("managedAgent", () => {
         user: [".kimi-code/skills", ".agents/skills"],
         project: [".kimi-code/skills", ".agents/skills"],
       },
-      permissionCli: {
-        workspaceWrite: ["--yolo"],
-        full: ["--auto"],
-      },
       supportsManualCompaction: true,
     });
+    // Kimi's ACP server ignores launch-time permission flags, so the entry
+    // must not carry a permissionCli (see README, Permission modes).
+    expect(agent).not.toHaveProperty("permissionCli");
+  });
+
+  it("strips a permissionCli written by an earlier build", () => {
+    const existing = managedAgent(BINARY, {
+      id: PROFILE.id,
+      permissionCli: { workspaceWrite: ["--yolo"], full: ["--auto"] },
+    });
+    expect(existing).not.toHaveProperty("permissionCli");
   });
 
   it("keeps keys the user added and env they set", () => {

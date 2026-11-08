@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 import {
   ACP_PLUGIN_ID,
   PROFILE,
@@ -41,17 +41,20 @@ function isExecutable(path: string): boolean {
 }
 
 function findBinary(existing?: CustomAgent): string | null {
-  if (typeof existing?.command === "string" && existing.command.includes(delimiter) && isExecutable(existing.command)) {
+  // A previously recorded absolute path wins, so a user-pinned wrapper
+  // survives reboots and a same-named binary elsewhere is never picked.
+  if (typeof existing?.command === "string" && isAbsolute(existing.command) && isExecutable(existing.command)) {
     return existing.command;
   }
   const names = process.platform === "win32"
     ? [`${PROFILE.binary}.exe`, `${PROFILE.binary}.cmd`, PROFILE.binary]
     : [PROFILE.binary];
   const directories = [
-    ...(process.env.PATH ?? "").split(delimiter),
     // The native install script and self-upgrades place the binary here
     // (it is also Kimi's documented default remoteBin for SSH targets).
+    // Probed before PATH so the legacy Python `kimi-cli` never shadows it.
     join(homedir(), ".kimi-code", "bin"),
+    ...(process.env.PATH ?? "").split(delimiter),
     join(homedir(), ".local", "bin"),
     join(homedir(), ".npm-global", "bin"),
     "/opt/homebrew/bin",
@@ -92,6 +95,9 @@ function readLegacyAgents(dataDir: string): CustomAgent[] {
   return Array.isArray(config.customAcpAgents) ? [...config.customAcpAgents] as CustomAgent[] : [];
 }
 
+// The legacy `customAcpAgents` array in config.json was removed in bb 0.41.
+// It is only ever written here to *remove* a leftover entry of ours, never
+// to register one.
 function writeLegacyAgents(dataDir: string, agents: CustomAgent[]): boolean {
   const configPath = join(dataDir, "config.json");
   const config = readConfig(configPath);
@@ -114,20 +120,25 @@ export default function plugin(bb: BbPluginApi) {
     return process.env.BB_DATA_DIR ?? join(homedir(), ".bb");
   }
 
+  // Returns null when the ACP plugin's settings cannot be read yet (the
+  // startup 404 race). A malformed `customAgents` value is *not* transient:
+  // parseCustomAgents throws and the error surfaces to the caller instead of
+  // being retried or silently routed to the removed legacy config path.
   async function readSettingAgents(): Promise<CustomAgent[] | null> {
+    let values: Record<string, unknown>;
     try {
       const settings = await bb.sdk.plugins.getSettings({ pluginId: ACP_PLUGIN_ID });
-      return parseCustomAgents(settings.values.customAgents);
+      values = settings.values;
     } catch (error) {
       bb.log.warn(`Could not read ${ACP_PLUGIN_ID} customAgents: ${String(error)}`);
       return null;
     }
+    return parseCustomAgents(values.customAgents);
   }
 
   // At startup the settings read can lose the race with the ACP plugin's own
-  // factory and answer 404. Falling back to the deprecated config.json array on
-  // that answer would write legacy config on every fresh install, so wait for
-  // the plugin to come up before deciding it is unavailable.
+  // factory and answer 404. Wait for the plugin to come up before deciding
+  // the settings store is unavailable.
   async function readSettingAgentsWhenReady(): Promise<CustomAgent[] | null> {
     for (let attempt = 0; attempt < SETTINGS_READY_ATTEMPTS; attempt += 1) {
       const agents = await readSettingAgents();
@@ -137,40 +148,47 @@ export default function plugin(bb: BbPluginApi) {
     return readSettingAgents();
   }
 
-  async function writeSettingAgents(agents: CustomAgent[]): Promise<boolean> {
+  async function writeSettingAgents(agents: CustomAgent[]): Promise<void> {
     const serialized = agents.length === 0 ? "" : stringifyCustomAgents(agents);
     await bb.sdk.plugins.updateSettings({
       pluginId: ACP_PLUGIN_ID,
       values: { customAgents: serialized },
     });
-    return true;
+  }
+
+  // `customAgents` is one string shared by every ACP provider plugin (auggie,
+  // copilot, ...), and each rewrites it whole. Re-read after writing so a
+  // concurrent provisioner clobbering our entry is caught, not lost silently.
+  async function writeSettingAgentsVerified(agents: CustomAgent[]): Promise<void> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await writeSettingAgents(agents);
+      const reread = await readSettingAgents();
+      if (reread !== null && findOwnAgent(reread) !== undefined) return;
+      bb.log.warn(`${ACP_PLUGIN_ID} customAgents lost the ${PROFILE.id} entry after write; retrying`);
+    }
+    throw new Error(`Could not confirm the ${PROFILE.id} entry in ${ACP_PLUGIN_ID} customAgents after writing`);
   }
 
   async function provision(waitForSettings = false): Promise<{ changed: boolean; binary: string }> {
     const root = await dataDir();
     const settingAgents = waitForSettings ? await readSettingAgentsWhenReady() : await readSettingAgents();
+    if (settingAgents === null) {
+      throw new Error(
+        `${ACP_PLUGIN_ID} settings are unavailable. Enable bb's built-in ACP providers plugin, then run \`bb ${PROFILE.id} repair\`.`,
+      );
+    }
     const legacyAgents = readLegacyAgents(root);
-    const existing = (settingAgents === null ? undefined : findOwnAgent(settingAgents))
-      ?? findOwnAgent(legacyAgents);
+    const existing = findOwnAgent(settingAgents) ?? findOwnAgent(legacyAgents);
     const binary = findBinary(existing);
     if (binary === null) throw new Error(`${PROFILE.binary} was not found. ${PROFILE.installHint}`);
 
     const managed = managedAgent(binary, existing);
     let changed = false;
 
-    if (settingAgents !== null) {
-      const next = upsertAgent(settingAgents, managed);
-      if (next.changed) {
-        await writeSettingAgents(next.agents);
-        changed = true;
-      }
-    } else {
-      const next = upsertAgent(legacyAgents, managed);
-      if (next.changed && writeLegacyAgents(root, next.agents)) {
-        await bb.sdk.system.reloadConfig();
-        changed = true;
-      }
-      return { changed, binary };
+    const next = upsertAgent(settingAgents, managed);
+    if (next.changed) {
+      await writeSettingAgentsVerified(next.agents);
+      changed = true;
     }
 
     const stripped = removeAgent(legacyAgents);
@@ -230,7 +248,10 @@ export default function plugin(bb: BbPluginApi) {
       if (command === "repair") {
         try {
           const result = await provision();
-          return { exitCode: 0, stdout: `${PROFILE.providerId}: ${result.changed ? "repaired" : "already up to date"}\nCLI: ${result.binary}\n` };
+          return {
+            exitCode: 0,
+            stdout: `${PROFILE.providerId}: ${result.changed ? "repaired" : "already up to date"}\nCLI: ${result.binary}\nRun \`bb plugin reload ${PROFILE.id}\` to clear a boot-time needs-configuration status.\n`,
+          };
         } catch (error) {
           return { exitCode: 1, stderr: `${String(error)}\n` };
         }
@@ -245,24 +266,44 @@ export default function plugin(bb: BbPluginApi) {
       }
       if (command === "status") {
         const root = await dataDir();
-        const settingAgents = await readSettingAgents();
-        const legacyAgents = readLegacyAgents(root);
+        let settingAgents: CustomAgent[] | null = null;
+        let settingError: string | null = null;
+        try {
+          settingAgents = await readSettingAgents();
+        } catch (error) {
+          settingError = String(error);
+        }
+        let legacyAgents: CustomAgent[] = [];
+        let legacyError = false;
+        try {
+          legacyAgents = readLegacyAgents(root);
+        } catch {
+          legacyError = true;
+        }
         const entry = (settingAgents === null ? undefined : findOwnAgent(settingAgents))
           ?? findOwnAgent(legacyAgents);
         const binary = findBinary(entry);
-        let registered = false;
+        let registered: boolean | "unknown" = "unknown";
         try {
           registered = (await bb.sdk.providers.list()).some((provider) => provider.id === PROFILE.providerId);
-        } catch {}
-        const setting = settingAgents?.some(isOwnAgent) ? "present" : "missing";
-        const legacy = legacyAgents.some(isOwnAgent) ? "present" : "absent";
+        } catch (error) {
+          bb.log.warn(`Could not list providers: ${String(error)}`);
+        }
+        const setting = settingError !== null
+          ? `unreadable (${settingError})`
+          : settingAgents === null
+            ? "unavailable"
+            : settingAgents.some(isOwnAgent)
+              ? "present"
+              : "missing";
+        const legacy = legacyError ? "unreadable" : legacyAgents.some(isOwnAgent) ? "present" : "absent";
         return {
-          exitCode: binary && entry && registered ? 0 : 1,
+          exitCode: binary && entry && registered === true ? 0 : 1,
           stdout: [
             `CLI: ${binary ?? "NOT FOUND"}`,
             `ACP customAgents entry: ${setting}`,
             `legacy config.json entry: ${legacy}`,
-            `bb provider ${PROFILE.providerId}: ${registered ? "registered" : "NOT registered"}`,
+            `bb provider ${PROFILE.providerId}: ${registered === "unknown" ? "unknown" : registered ? "registered" : "NOT registered"}`,
           ].join("\n") + "\n",
         };
       }
