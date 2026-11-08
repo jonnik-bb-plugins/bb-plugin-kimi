@@ -1,11 +1,13 @@
 # bb-plugin-kimi
 
+GitHub: https://github.com/JonniK/bb-plugin-kimi
 npm package: `bb-plugin-kimi` (marketplace installs from git, not npm)
 bb plugin id: `kimi` (from package name `bb-plugin-kimi`)
 provider id: `acp-kimi`
 CLI: `bb kimi status`, `bb kimi repair`, `bb kimi unregister`
 Marketplace entry: `get-bb/marketplace` `entries/kimi.json`
 Current range: `^0.1.0` → node-semver `>=0.1.0 <0.2.0-0`
+`author.github`: `JonniK` (gates later entry changes)
 
 # Release
 
@@ -14,6 +16,11 @@ Current range: `^0.1.0` → node-semver `>=0.1.0 <0.2.0-0`
 If `bb plugin build .` stalls in a working tree with `node_modules`, build
 from a clean copy instead (`git archive HEAD | tar -x -C /tmp/kimi-build` and
 run `bb plugin build .` there), then copy `dist/` back and commit it.
+
+`dist/*.meta.json` records the toolchain that built it: `pluginSdkVersion`
+follows the bb version running the build (bb 0.48.1 stamps 0.6.104, bb 0.49
+stamps 0.6.132). `engines.bbPluginSdk` must not exceed the committed stamp —
+raise the floor only together with a dist rebuild on a newer bb.
 
 ## Do not move a tag
 
@@ -61,8 +68,8 @@ bb plugin logs kimi -n 20
 Expect `kimi@<version> running`; `bb kimi status` exit 0 with
 `CLI: <path to kimi>`, `ACP customAgents entry: present`,
 `legacy config.json entry: absent`, `bb provider acp-kimi: registered`;
-`bb provider models acp-kimi` prints the live Kimi catalog
-(`kimi-code/k3`, `kimi-code/kimi-for-coding`, …).
+`bb provider models acp-kimi` prints the live Kimi catalog (non-empty list,
+one model marked default).
 
 Boot can emit a `warn` `Could not read provider-acp customAgents: … HTTP 404`
 while ACP settings race the factory — expected if a later info line shows
@@ -72,9 +79,10 @@ Do not run `bb kimi unregister` as part of a release.
 
 ## Publishing checklist (first submission)
 
-1. Repo name `bb-plugin-kimi`, tagged with the `bb-plugin` topic.
+1. Repo `JonniK/bb-plugin-kimi`, tagged with the `bb-plugin` topic.
 2. `v0.1.0` tag pushed, GitHub release created with `--verify-tag`.
-3. PR to `get-bb/marketplace` adding `entries/kimi.json`
-   (`source.git.url`, `source.git.range: ^0.1.0`, author block).
+3. PR to `get-bb/marketplace` from `JonniK` adding `entries/kimi.json` —
+   a ready draft is `docs/marketplace-entry.json`; copy `assets/logo.svg`
+   into the marketplace repo's `icons/` and point `icon.url` at it.
 4. Optional: PR to `MGrin/awesome-bb-plugins` adding the entry under
    **Providers**.

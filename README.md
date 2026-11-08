@@ -25,7 +25,7 @@ login (subscription or API key), billed by Moonshot, not bb.
 Until the marketplace entry is merged, install directly from GitHub:
 
 ```bash
-bb plugin install git:https://github.com/OWNER/bb-plugin-kimi.git@main
+bb plugin install git:https://github.com/JonniK/bb-plugin-kimi.git@main
 ```
 
 For local development:
@@ -76,11 +76,11 @@ permission mode therefore maps like this:
 | Accept edits | Same prompting as Auto; bb additionally denies `fs/write_text_file` outside the workspace roots |
 | Full access  | bb itself answers every permission request with allow-once — nothing prompts |
 
-To give Kimi more autonomy, pick its own session mode from the mode picker in
-the composer — Kimi advertises `auto` (auto-approve safe operations) and
-`yolo` (auto-approve everything) over ACP as the `mode` session config
-option. Durable per-tool rules live in `[[permission.rules]]` in
-`~/.kimi-code/config.toml`.
+To give Kimi more autonomy, set its own session mode — Kimi advertises it
+over ACP as the `mode` session option (`auto` = auto-approve safe operations,
+`yolo` = auto-approve everything), and bb exposes it in the thread options,
+e.g. `bb thread spawn --option mode=auto`. Durable per-tool rules live in
+`[[permission.rules]]` in `~/.kimi-code/config.toml`.
 
 ## Check or repair
 
@@ -91,8 +91,11 @@ bb plugin reload kimi        # clears a boot-time needs-configuration status
 bb provider models acp-kimi
 ```
 
-If the CLI moves after an upgrade, `bb kimi repair` records its new absolute
-path and reloads bb.
+At boot the plugin reuses the recorded absolute path to `kimi`, so a wrapper
+you pinned survives restarts. `bb kimi repair` instead re-resolves the binary
+from the search order — use it when the CLI moved after an upgrade or the
+recorded path points at a stale install; bb picks the new path up for the
+next thread.
 
 ## Uninstall
 
@@ -124,6 +127,6 @@ npm test
 npm run build
 ```
 
-The plugin requires bb 0.40+ and plugin SDK 0.6.132+. Server code is adapted
+The plugin requires bb 0.40+ and plugin SDK 0.6.104+. Server code is adapted
 from [bb-auggie](https://github.com/ai-ecoverse/bb-auggie) (MIT), the reference
 implementation of this integration pattern.

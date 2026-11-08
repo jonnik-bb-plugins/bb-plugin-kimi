@@ -43,6 +43,7 @@ function isExecutable(path: string): boolean {
 function findBinary(existing?: CustomAgent): string | null {
   // A previously recorded absolute path wins, so a user-pinned wrapper
   // survives reboots and a same-named binary elsewhere is never picked.
+  // `bb kimi repair` passes no `existing` to force a fresh search.
   if (typeof existing?.command === "string" && isAbsolute(existing.command) && isExecutable(existing.command)) {
     return existing.command;
   }
@@ -158,18 +159,24 @@ export default function plugin(bb: BbPluginApi) {
 
   // `customAgents` is one string shared by every ACP provider plugin (auggie,
   // copilot, ...), and each rewrites it whole. Re-read after writing so a
-  // concurrent provisioner clobbering our entry is caught, not lost silently.
-  async function writeSettingAgentsVerified(agents: CustomAgent[]): Promise<void> {
+  // clobber that lands between our write and the re-read is caught — a later
+  // clobber still is not. The retry upserts onto the freshly read list, never
+  // rewrites the stale snapshot, so another plugin's concurrent entry
+  // survives.
+  async function writeSettingAgentsVerified(agents: CustomAgent[], managed: CustomAgent): Promise<void> {
+    let candidate = agents;
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      await writeSettingAgents(agents);
+      await writeSettingAgents(candidate);
       const reread = await readSettingAgents();
       if (reread !== null && findOwnAgent(reread) !== undefined) return;
-      bb.log.warn(`${ACP_PLUGIN_ID} customAgents lost the ${PROFILE.id} entry after write; retrying`);
+      if (reread === null) break;
+      bb.log.warn(`${ACP_PLUGIN_ID} customAgents lost the ${PROFILE.id} entry after write; retrying on the latest list`);
+      candidate = upsertAgent(reread, managed).agents;
     }
     throw new Error(`Could not confirm the ${PROFILE.id} entry in ${ACP_PLUGIN_ID} customAgents after writing`);
   }
 
-  async function provision(waitForSettings = false): Promise<{ changed: boolean; binary: string }> {
+  async function provision(waitForSettings = false, forceSearch = false): Promise<{ changed: boolean; binary: string }> {
     const root = await dataDir();
     const settingAgents = waitForSettings ? await readSettingAgentsWhenReady() : await readSettingAgents();
     if (settingAgents === null) {
@@ -179,7 +186,7 @@ export default function plugin(bb: BbPluginApi) {
     }
     const legacyAgents = readLegacyAgents(root);
     const existing = findOwnAgent(settingAgents) ?? findOwnAgent(legacyAgents);
-    const binary = findBinary(existing);
+    const binary = findBinary(forceSearch ? undefined : existing);
     if (binary === null) throw new Error(`${PROFILE.binary} was not found. ${PROFILE.installHint}`);
 
     const managed = managedAgent(binary, existing);
@@ -187,7 +194,7 @@ export default function plugin(bb: BbPluginApi) {
 
     const next = upsertAgent(settingAgents, managed);
     if (next.changed) {
-      await writeSettingAgentsVerified(next.agents);
+      await writeSettingAgentsVerified(next.agents, managed);
       changed = true;
     }
 
@@ -240,14 +247,16 @@ export default function plugin(bb: BbPluginApi) {
     summary: `Manage the ${PROFILE.displayName} ACP provider.`,
     commands: [
       { name: "status", summary: "Check the CLI and bb provider registration", usage: `${PROFILE.id} status` },
-      { name: "repair", summary: "Rewrite and reload the managed ACP configuration", usage: `${PROFILE.id} repair` },
+      { name: "repair", summary: "Re-resolve the CLI and rewrite the managed ACP configuration", usage: `${PROFILE.id} repair` },
       { name: "unregister", summary: "Remove this plugin's managed ACP configuration", usage: `${PROFILE.id} unregister` },
     ],
     async run(argv) {
       const command = argv[0] ?? "status";
       if (command === "repair") {
         try {
-          const result = await provision();
+          // Repair ignores the recorded binary path on purpose: it is the way
+          // to correct an entry that points at a stale install location.
+          const result = await provision(false, true);
           return {
             exitCode: 0,
             stdout: `${PROFILE.providerId}: ${result.changed ? "repaired" : "already up to date"}\nCLI: ${result.binary}\nRun \`bb plugin reload ${PROFILE.id}\` to clear a boot-time needs-configuration status.\n`,
